@@ -452,8 +452,14 @@ async def fetch_history(
         stocks = db.query(Stock.symbol).all()
         symbols = [s.symbol for s in stocks]
 
+    # If no stocks in DB yet (fresh install), discover and save them first
     if not symbols:
-        return {"message": "All stocks already have sufficient history", "saved": 0}
+        stocks_data = await data_fetcher.fetch_all_stocks()
+        if stocks_data:
+            data_fetcher.save_stocks(db, stocks_data)
+            symbols = [s["symbol"] for s in stocks_data]
+        else:
+            return {"message": "No stocks found. Check network connectivity.", "saved": 0}
 
     saved = await data_fetcher.fetch_and_save_history(db, symbols, days)
     return {
