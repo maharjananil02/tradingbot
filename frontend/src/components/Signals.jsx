@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import useStore from '../hooks/useStore';
 import { generateSignals } from '../utils/api';
 import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import SignalDetail from './SignalDetail';
 
 export default function Signals() {
   const { signals, fetchSignals, signalsLoading } = useStore();
   const [generating, setGenerating] = useState(false);
+  const [selectedSymbol, setSelectedSymbol] = useState(null);
 
   useEffect(() => {
     fetchSignals();
@@ -73,7 +75,8 @@ export default function Signals() {
           {signals.map((s, i) => (
             <div
               key={i}
-              className={`rounded-xl p-5 border transition-all hover:scale-[1.02] ${getSignalColor(s.signal_type)}`}
+              onClick={() => setSelectedSymbol(s.symbol)}
+              className={`rounded-xl p-5 border transition-all hover:scale-[1.02] cursor-pointer ${getSignalColor(s.signal_type)}`}
             >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -134,6 +137,10 @@ export default function Signals() {
           <div className="text-slate-500 text-lg mb-2">No signals today</div>
           <p className="text-slate-600 text-sm">Click "Generate Signals" to analyze stocks, or wait for the scheduled 11:00 AM scan.</p>
         </div>
+      )}
+
+      {selectedSymbol && (
+        <SignalDetail symbol={selectedSymbol} onClose={() => setSelectedSymbol(null)} />
       )}
     </div>
   );

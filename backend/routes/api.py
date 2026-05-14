@@ -399,6 +399,251 @@ async def get_stocks():
     return await data_fetcher.fetch_all_stocks()
 
 
+@router.get("/signals/trace/{symbol}")
+def trace_signal(symbol: str, db: Session = Depends(get_db)):
+    """Get detailed signal calculation breakdown for a stock."""
+    from models.tables import Signal, Price
+    from utils.technical_indicators import (
+        calculate_sma, calculate_rsi, calculate_macd,
+        calculate_volume_sma, calculate_atr, detect_double_bottom, is_breakout,
+    )
+
+    # Get signal
+    sig = db.query(Signal).filter(Signal.symbol == symbol).order_by(Signal.date.desc()).first()
+    signal_data = None
+    if sig:
+        signal_data = {
+            "type": sig.signal_type, "confidence": sig.confidence,
+            "reason": sig.reason, "date": str(sig.date),
+            "entry_price": sig.entry_price, "stop_loss": sig.stop_loss,
+            "target_1": sig.target_1, "target_2": sig.target_2, "target_3": sig.target_3,
+            "suggested_quantity": sig.suggested_quantity, "risk_reward_ratio": sig.risk_reward_ratio,
+        }
+
+    # Load prices
+    prices = db.query(Price).filter(Price.symbol == symbol).order_by(Price.date.desc()).limit(200).all()[::-1]
+    if len(prices) < 50:
+        raise HTTPException(404, f"Insufficient data for {symbol} ({len(prices)} records)")
+
+    closes = [p.close for p in prices]
+    volumes = [p.volume or 0 for p in prices]
+    highs = [p.high or p.close for p in prices]
+    lows = [p.low or p.close for p in prices]
+
+    # Volume
+    vol_sma = calculate_volume_sma(volumes, 20)
+    avg_vol = float(vol_sma[-1]) if vol_sma[-1] else 0
+    surge = bool(volumes[-1] > avg_vol * 1.2) if avg_vol > 0 else False
+
+    # SMA
+    sma20 = calculate_sma(closes, 20)
+    sma50 = calculate_sma(closes, 50)
+    fresh_cross = False
+    for i in range(-3, 0):
+        if (sma20[i - 1] is not None and sma50[i - 1] is not None
+                and sma20[i - 1] <= sma50[i - 1] and sma20[i] > sma50[i]):
+            fresh_cross = True
+            break
+
+    # RSI
+    rsi = calculate_rsi(closes, 14)
+    oversold_bounce = bool(rsi[-1] < 35 and rsi[-2] < 30 and rsi[-1] > rsi[-2]) if rsi[-1] and rsi[-2] else False
+
+    # MACD
+    macd = calculate_macd(closes)
+    bullish_cross = bool(macd["macd"][-2] <= macd["signal"][-2] and macd["macd"][-1] > macd["signal"][-1])
+
+    # Patterns
+    dbl_bottom = bool(detect_double_bottom(closes))
+    breakout = bool(is_breakout(closes, volumes, 20))
+
+    # ATR
+    atr = calculate_atr(highs, lows, closes, 14)
+    atr_val = round(float(atr[-1]), 2) if atr[-1] else None
+
+    buy_count = int(sum([fresh_cross, oversold_bounce, bullish_cross, dbl_bottom, breakout]))
+
+    return {
+        "symbol": symbol,
+        "signal": signal_data,
+        "current_price": float(closes[-1]),
+        "current_date": str(prices[-1].date),
+        "indicators": {
+            "volume": {
+                "current": int(volumes[-1]),
+                "avg_20d": int(round(avg_vol)),
+                "surge": surge,
+                "liquid": bool(avg_vol >= 100),
+            },
+            "sma": {
+                "sma20": round(float(sma20[-1]), 2) if sma20[-1] else None,
+                "sma50": round(float(sma50[-1]), 2) if sma50[-1] else None,
+                "price_above_sma20": bool(closes[-1] > sma20[-1]) if sma20[-1] else False,
+                "sma20_above_sma50": bool(sma20[-1] > sma50[-1]) if sma20[-1] and sma50[-1] else False,
+                "fresh_crossover": fresh_cross,
+                "triggered": fresh_cross,
+            },
+            "rsi": {
+                "current": round(float(rsi[-1]), 1) if rsi[-1] else None,
+                "previous": round(float(rsi[-2]), 1) if rsi[-2] else None,
+                "oversold_bounce": oversold_bounce,
+                "triggered": oversold_bounce,
+            },
+            "macd": {
+                "macd_line": round(float(macd["macd"][-1]), 3),
+                "signal_line": round(float(macd["signal"][-1]), 3),
+                "prev_macd": round(float(macd["macd"][-2]), 3),
+                "prev_signal": round(float(macd["signal"][-2]), 3),
+                "bullish_crossover": bullish_cross,
+                "triggered": bullish_cross,
+            },
+            "patterns": {
+                "double_bottom": dbl_bottom,
+                "breakout": breakout,
+                "triggered": bool(dbl_bottom or breakout),
+            },
+            "atr": {"value": atr_val},
+        },
+        "buy_confirmations": buy_count,
+        "verdict": "BUY" if buy_count >= 2 else "NO SIGNAL",
+    }
+
+
+@router.get("/signals/predict/{symbol}")
+def predict_prices(symbol: str, days: int = 7, db: Session = Depends(get_db)):
+    """Predict next N days prices using technical analysis projection."""
+    from models.tables import Price
+    from utils.technical_indicators import (
+        calculate_sma, calculate_rsi, calculate_macd, calculate_atr,
+        calculate_ema, calculate_bollinger_bands,
+    )
+    import numpy as np
+    from datetime import timedelta
+
+    prices = db.query(Price).filter(Price.symbol == symbol).order_by(Price.date.desc()).limit(200).all()[::-1]
+    if len(prices) < 50:
+        raise HTTPException(404, f"Insufficient data for {symbol}")
+
+    closes = [p.close for p in prices]
+    highs = [p.high or p.close for p in prices]
+    lows = [p.low or p.close for p in prices]
+    opens = [p.open or p.close for p in prices]
+    volumes = [p.volume or 0 for p in prices]
+
+    # Historical candles (last 30 days) — deduplicated by date
+    history = []
+    seen_dates = set()
+    for p in prices[-30:]:
+        d = str(p.date)
+        if d not in seen_dates:
+            seen_dates.add(d)
+            history.append({
+                "date": d,
+                "open": float(p.open or p.close),
+                "high": float(p.high or p.close),
+                "low": float(p.low or p.close),
+                "close": float(p.close),
+                "volume": int(p.volume or 0),
+            })
+
+    # Prediction using mean-reversion + trend + volatility
+    atr = calculate_atr(highs, lows, closes, 14)
+    atr_val = atr[-1] if atr[-1] else (closes[-1] * 0.02)
+    sma20 = calculate_sma(closes, 20)
+    sma50 = calculate_sma(closes, 50)
+    ema12 = calculate_ema(closes, 12)
+    bb = calculate_bollinger_bands(closes, 20, 2.0)
+    rsi_vals = calculate_rsi(closes, 14)
+
+    current_price = closes[-1]
+    current_rsi = rsi_vals[-1] if rsi_vals[-1] else 50
+    sma20_val = sma20[-1] if sma20[-1] else current_price
+    sma50_val = sma50[-1] if sma50[-1] else current_price
+
+    # Trend bias: positive if above SMA, negative if below
+    trend_bias = 0
+    if sma20_val and sma50_val:
+        if current_price > sma20_val > sma50_val:
+            trend_bias = 0.3  # Strong uptrend
+        elif current_price > sma20_val:
+            trend_bias = 0.15
+        elif current_price < sma20_val < sma50_val:
+            trend_bias = -0.3  # Strong downtrend
+        elif current_price < sma20_val:
+            trend_bias = -0.15
+
+    # Mean reversion pull
+    mean_target = sma20_val
+    reversion_strength = 0.05
+
+    # RSI bias
+    rsi_bias = 0
+    if current_rsi > 70:
+        rsi_bias = -0.2  # Overbought, expect pullback
+    elif current_rsi < 30:
+        rsi_bias = 0.2  # Oversold, expect bounce
+
+    # Recent momentum (last 5 days return)
+    if len(closes) >= 6:
+        momentum = (closes[-1] - closes[-6]) / closes[-6]
+    else:
+        momentum = 0
+
+    # Generate predictions
+    np.random.seed(42)
+    predictions = []
+    pred_close = current_price
+    pred_open = current_price
+    current_date = prices[-1].date
+    used_dates = set()
+
+    for d in range(1, days * 2):  # Generate enough to get `days` trading days
+        if len(predictions) >= days:
+            break
+        next_date = current_date + timedelta(days=d)
+        # Skip Saturday & Sunday (Nepal holidays)
+        if next_date.weekday() in (5, 6):
+            continue
+        # Skip duplicate dates
+        if str(next_date) in used_dates:
+            continue
+        used_dates.add(str(next_date))
+
+        # Daily return = trend + mean_reversion + rsi_effect + noise
+        daily_drift = (trend_bias + rsi_bias) * (atr_val / current_price) * 0.3
+        mean_pull = (mean_target - pred_close) / pred_close * reversion_strength
+        noise = np.random.normal(0, atr_val * 0.4)
+
+        pred_open = pred_close
+        change = pred_close * daily_drift + pred_close * mean_pull + noise
+
+        pred_close = round(pred_close + change, 2)
+        pred_high = round(max(pred_open, pred_close) + abs(noise) * 0.5, 2)
+        pred_low = round(min(pred_open, pred_close) - abs(noise) * 0.5, 2)
+
+        # Update RSI-like momentum decay
+        rsi_bias *= 0.8
+        trend_bias *= 0.95
+
+        predictions.append({
+            "date": str(next_date),
+            "open": float(round(pred_open, 2)),
+            "high": float(pred_high),
+            "low": float(pred_low),
+            "close": float(pred_close),
+            "predicted": True,
+        })
+
+    return {
+        "symbol": symbol,
+        "history": history,
+        "predictions": predictions,
+        "current_price": float(current_price),
+        "atr": float(round(atr_val, 2)),
+        "trend": "UP" if trend_bias > 0 else "DOWN" if trend_bias < 0 else "NEUTRAL",
+    }
+
+
 @router.get("/market/live")
 async def get_live_prices():
     """Get live market prices."""

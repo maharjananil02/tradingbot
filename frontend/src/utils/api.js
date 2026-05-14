@@ -24,6 +24,9 @@ export const closePosition = (id, exitPrice) =>
 export const getSignals = (date = null) =>
   api.get(`/signals${date ? `?target_date=${date}` : ''}`);
 export const generateSignals = () => api.post('/signals/generate');
+export const getSignalTrace = (symbol) => api.get(`/signals/trace/${symbol}`);
+export const getPricePrediction = (symbol, days = 7) =>
+  api.get(`/signals/predict/${symbol}?days=${days}`);
 
 // Trades
 export const getTrades = (isPaper = false, limit = 50) =>
