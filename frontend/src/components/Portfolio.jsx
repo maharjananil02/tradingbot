@@ -12,15 +12,24 @@ export default function Portfolio() {
     symbol: '', entry_price: '', quantity: '', stop_loss_pct: '5', is_paper: false
   });
   const [error, setError] = useState('');
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [nextRefresh, setNextRefresh] = useState(10);
 
   useEffect(() => {
     fetchPositions();
     fetchRisk();
+    setLastRefresh(new Date());
+    setNextRefresh(10);
     const interval = setInterval(() => {
       fetchPositions();
       fetchRisk();
-    }, 30000); // Auto-refresh every 30 seconds
-    return () => clearInterval(interval);
+      setLastRefresh(new Date());
+      setNextRefresh(10);
+    }, 10000);
+    const countdown = setInterval(() => {
+      setNextRefresh(prev => prev > 0 ? prev - 1 : 0);
+    }, 1000);
+    return () => { clearInterval(interval); clearInterval(countdown); };
   }, []);
 
   const handleAddPosition = async (e) => {
@@ -96,7 +105,10 @@ export default function Portfolio() {
       {/* Positions */}
       <div className="bg-surface rounded-xl p-5 border border-slate-700/50">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">Positions</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-lg font-semibold">Positions</h3>
+            <span className="text-xs text-slate-500">Last updated: {lastRefresh.toLocaleTimeString()} • Next refresh: {nextRefresh}s</span>
+          </div>
           <button
             onClick={() => setShowAdd(!showAdd)}
             className="flex items-center gap-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium transition-colors"
