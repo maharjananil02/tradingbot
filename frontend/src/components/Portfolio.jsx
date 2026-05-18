@@ -16,6 +16,11 @@ export default function Portfolio() {
   useEffect(() => {
     fetchPositions();
     fetchRisk();
+    const interval = setInterval(() => {
+      fetchPositions();
+      fetchRisk();
+    }, 30000); // Auto-refresh every 30 seconds
+    return () => clearInterval(interval);
   }, []);
 
   const handleAddPosition = async (e) => {
