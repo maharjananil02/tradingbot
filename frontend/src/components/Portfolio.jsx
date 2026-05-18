@@ -15,15 +15,53 @@ export default function Portfolio() {
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [nextRefresh, setNextRefresh] = useState(10);
 
+  const getNextBotRun = () => {
+    const now = new Date();
+    const nepal = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kathmandu' }));
+    const h = nepal.getHours(), m = nepal.getMinutes(), day = nepal.getDay();
+    const isTradingDay = day >= 0 && day <= 4; // Sun-Thu
+    if (isTradingDay && h >= 11 && h < 15) {
+      // During market hours - next run is next minute
+      const next = new Date(nepal);
+      next.setMinutes(m + 1, 0, 0);
+      return next.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    } else if (isTradingDay && h === 15 && m < 1) {
+      return 'Today 3:01 PM (final sync)';
+    } else if (isTradingDay && h < 11) {
+      return 'Today 11:00 AM';
+    } else {
+      // After hours or non-trading day - find next trading day
+      let daysAhead = 1;
+      for (let i = 1; i <= 7; i++) {
+        const nextDay = (day + i) % 7;
+        if (nextDay >= 0 && nextDay <= 4) { daysAhead = i; break; }
+      }
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      return `${dayNames[(day + daysAhead) % 7]} 11:00 AM`;
+    }
+  };
+
+  const isMarketOpen = () => {
+    const now = new Date();
+    const nepal = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kathmandu' }));
+    const h = nepal.getHours(), m = nepal.getMinutes(), day = nepal.getDay();
+    const isTradingDay = day >= 0 && day <= 4; // Sun-Thu
+    const timeInMinutes = h * 60 + m;
+    // Market: 11:00 (660) to 15:01 (901) — includes 1 min after close for final sync
+    return isTradingDay && timeInMinutes >= 660 && timeInMinutes <= 901;
+  };
+
   useEffect(() => {
     fetchPositions();
     fetchRisk();
     setLastRefresh(new Date());
     setNextRefresh(10);
     const interval = setInterval(() => {
-      fetchPositions();
-      fetchRisk();
-      setLastRefresh(new Date());
+      if (isMarketOpen()) {
+        fetchPositions();
+        fetchRisk();
+        setLastRefresh(new Date());
+      }
       setNextRefresh(10);
     }, 10000);
     const countdown = setInterval(() => {
@@ -107,7 +145,7 @@ export default function Portfolio() {
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-3">
             <h3 className="text-lg font-semibold">Positions</h3>
-            <span className="text-xs text-slate-500">Last updated: {lastRefresh.toLocaleTimeString()} • Next refresh: {nextRefresh}s</span>
+            <span className="text-xs text-slate-500">Last updated: {lastRefresh.toLocaleTimeString()} • Next refresh: {nextRefresh}s • Bot next listen: {getNextBotRun()}</span>
           </div>
           <button
             onClick={() => setShowAdd(!showAdd)}

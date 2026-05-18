@@ -50,18 +50,18 @@ async def lifespan(app: FastAPI):
         id="real_time_tracker", replace_existing=True,
     )
 
+    # Final data sync: 3:01 PM Mon-Fri (one last check after market close)
+    scheduler.add_job(
+        real_time_tracker_task, "cron",
+        day_of_week="mon-fri", hour=15, minute=1,
+        id="final_sync", replace_existing=True,
+    )
+
     # Market close: 3:15 PM Mon-Fri
     scheduler.add_job(
         market_close_task, "cron",
         day_of_week="mon-fri", hour=15, minute=15,
         id="market_close", replace_existing=True,
-    )
-
-    # Mid-day update: 1:00 PM Mon-Fri
-    scheduler.add_job(
-        real_time_tracker_task, "cron",
-        day_of_week="mon-fri", hour=13, minute=0,
-        id="mid_day_update", replace_existing=True,
     )
 
     scheduler.start()
