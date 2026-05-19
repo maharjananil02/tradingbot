@@ -224,13 +224,13 @@ class DataFetcher:
             volume = _parse_int(cells[11].text)
             turnover = _parse_number(cells[13].text)
 
-            if close <= 0 and ltp <= 0:
+            if ltp <= 0 and close <= 0:
                 continue
 
             prices.append({
                 "symbol": symbol,
                 "lastTradedPrice": ltp if ltp > 0 else close,
-                "close": close if close > 0 else ltp,
+                "close": ltp if ltp > 0 else close,
                 "openPrice": open_p,
                 "highPrice": high,
                 "lowPrice": low,
@@ -335,7 +335,8 @@ class DataFetcher:
             symbol = p.get("symbol", p.get("companyShortName", ""))
             if not symbol:
                 continue
-            close_price = p.get("lastTradedPrice", p.get("close", p.get("ltp", 0)))
+            # Use LTP as the close price; fall back to close/ltp fields if missing
+            close_price = p.get("lastTradedPrice") or p.get("ltp") or p.get("close") or 0
             if not close_price:
                 continue
 
