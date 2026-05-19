@@ -170,6 +170,7 @@ class BacktestRequest(BaseModel):
     sma_long: int = 50
     rsi_period: int = 14
     strategy: str = "trend_following"
+    min_confirmations: int = 1
 
 
 class BacktestResult(BaseModel):
