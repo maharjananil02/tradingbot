@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import useStore from '../hooks/useStore';
-import { createPosition, closePosition } from '../utils/api';
-import { Plus, X, AlertTriangle, Pencil, Check } from 'lucide-react';
+import { createPosition, closePosition, manualSync } from '../utils/api';
+import { Plus, X, AlertTriangle, Pencil, Check, RefreshCw } from 'lucide-react';
 
 export default function Portfolio() {
   const { positions, fetchPositions, riskMetrics, fetchRisk, updatePosition } = useStore();
@@ -14,6 +14,23 @@ export default function Portfolio() {
   const [error, setError] = useState('');
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [nextRefresh, setNextRefresh] = useState(10);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      await manualSync();
+      fetchPositions();
+      fetchRisk();
+      setLastRefresh(new Date());
+      setNextRefresh(10);
+      alert('Manual sync completed successfully');
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to sync manually');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const getNextBotRun = () => {
     const now = new Date();
@@ -147,12 +164,21 @@ export default function Portfolio() {
             <h3 className="text-lg font-semibold">Positions</h3>
             <span className="text-xs text-slate-500">Last updated: {lastRefresh.toLocaleTimeString()} • Next refresh: {nextRefresh}s • Bot next listen: {getNextBotRun()}</span>
           </div>
-          <button
-            onClick={() => setShowAdd(!showAdd)}
-            className="flex items-center gap-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Add Position
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className="flex items-center gap-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:opacity-70 rounded-lg text-sm font-medium transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} /> {isSyncing ? 'Syncing...' : 'Sync Bot'}
+            </button>
+            <button
+              onClick={() => setShowAdd(!showAdd)}
+              className="flex items-center gap-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Add Position
+            </button>
+          </div>
         </div>
 
         {/* Add Position Form */}

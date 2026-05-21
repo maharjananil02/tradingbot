@@ -65,6 +65,7 @@ export const getSettings = () => api.get('/settings');
 export const toggleAutoExecute = (enabled) =>
   api.put(`/settings/auto-execute?enabled=${enabled}`);
 export const resetAllData = () => api.post('/settings/reset');
+export const manualSync = () => api.post('/system/sync');
 
 // Health
 export const getHealth = () => axios.get('/health');

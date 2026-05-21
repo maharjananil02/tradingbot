@@ -764,6 +764,20 @@ def toggle_auto_execute(enabled: bool):
     _runtime_state["auto_execute_enabled"] = enabled
     return {"auto_execute_enabled": enabled}
 
+@router.post("/system/sync")
+async def manual_sync():
+    """Manually trigger bot run (real-time tracker), forcing execution even outside market hours."""
+    from tasks.real_time_tracker import real_time_tracker_task
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Manual bot sync triggered")
+    try:
+        await real_time_tracker_task(force=True)
+        return {"message": "Sync completed successfully"}
+    except Exception as e:
+        logger.error(f"Manual sync failed: {e}")
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/settings/reset")
 def reset_all_data(db: Session = Depends(get_db)):

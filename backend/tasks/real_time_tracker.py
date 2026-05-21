@@ -12,9 +12,9 @@ from utils.validators import is_market_open
 logger = logging.getLogger(__name__)
 
 
-async def real_time_tracker_task():
+async def real_time_tracker_task(force=False):
     """Run every minute during market hours - update prices and check trailing SL."""
-    if not is_market_open():
+    if not is_market_open() and not force:
         return
 
     db = SessionLocal()
@@ -80,6 +80,6 @@ async def real_time_tracker_task():
         db.close()
 
 
-def run_real_time_tracker():
+def run_real_time_tracker(force=False):
     """Sync wrapper for scheduler."""
-    asyncio.run(real_time_tracker_task())
+    asyncio.run(real_time_tracker_task(force=force))
