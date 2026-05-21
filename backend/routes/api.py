@@ -114,14 +114,14 @@ def get_positions(is_paper: bool = False, db: Session = Depends(get_db)):
 @router.post("/positions", response_model=PositionSchema)
 def create_position(data: PositionCreate, db: Session = Depends(get_db)):
     """Open a new position."""
-    # Risk check
-    portfolio_value = settings.PAPER_TRADING_CAPITAL
-    can_open, reason = risk_manager.check_can_open_position(
-        db, portfolio_value, data.entry_price, data.quantity,
-        data.symbol, data.is_paper,
-    )
-    if not can_open:
-        raise HTTPException(status_code=400, detail=reason)
+    # Risk check bypassed for manual entry
+    # portfolio_value = settings.PAPER_TRADING_CAPITAL
+    # can_open, reason = risk_manager.check_can_open_position(
+    #     db, portfolio_value, data.entry_price, data.quantity,
+    #     data.symbol, data.is_paper,
+    # )
+    # if not can_open:
+    #     raise HTTPException(status_code=400, detail=reason)
 
     pos = position_manager.open_position(
         db, data.symbol, data.entry_price, data.quantity,
