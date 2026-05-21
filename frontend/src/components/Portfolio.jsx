@@ -36,7 +36,7 @@ export default function Portfolio() {
     const now = new Date();
     const nepal = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kathmandu' }));
     const h = nepal.getHours(), m = nepal.getMinutes(), day = nepal.getDay();
-    const isTradingDay = day >= 0 && day <= 4; // Sun-Thu
+    const isTradingDay = day >= 1 && day <= 5; // Mon-Fri
     if (isTradingDay && h >= 11 && h < 15) {
       // During market hours - next run is next minute
       const next = new Date(nepal);
@@ -51,7 +51,7 @@ export default function Portfolio() {
       let daysAhead = 1;
       for (let i = 1; i <= 7; i++) {
         const nextDay = (day + i) % 7;
-        if (nextDay >= 0 && nextDay <= 4) { daysAhead = i; break; }
+        if (nextDay >= 1 && nextDay <= 5) { daysAhead = i; break; }
       }
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       return `${dayNames[(day + daysAhead) % 7]} 11:00 AM`;
@@ -62,7 +62,7 @@ export default function Portfolio() {
     const now = new Date();
     const nepal = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kathmandu' }));
     const h = nepal.getHours(), m = nepal.getMinutes(), day = nepal.getDay();
-    const isTradingDay = day >= 0 && day <= 4; // Sun-Thu
+    const isTradingDay = day >= 1 && day <= 5; // Mon-Fri
     const timeInMinutes = h * 60 + m;
     // Market: 11:00 (660) to 15:01 (901) — includes 1 min after close for final sync
     return isTradingDay && timeInMinutes >= 660 && timeInMinutes <= 901;
